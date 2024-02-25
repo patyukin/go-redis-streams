@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"log"
 	"math/rand"
+	"sync"
 )
 
 var _ streamer.StreamerInterface = (*Streamer)(nil)
@@ -30,12 +31,84 @@ func NewRedisStreamer(ctx context.Context) *Streamer {
 	}
 }
 
-func (s *Streamer) Stream() {
-	// TODO
+func (s *Streamer) Consume(ctx context.Context, stream string) {
+	var wg *sync.WaitGroup
+
+	cursor := "0"
+
+	for {
+		result, err := s.c.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{stream, cursor},
+			Count:   10,
+			Block:   0,
+		}).Result()
+
+		if err != nil {
+			log.Fatalf("Failed to read from stream: %v\n", err)
+			return
+		}
+
+		// Обработка сообщений из стрима
+		for _, xStream := range result {
+			for _, message := range xStream.Messages {
+				wg.Add(1)
+				go func(ctx context.Context, m redis.XMessage) {
+					defer wg.Done()
+					processMessage(ctx, m)
+				}(ctx, message)
+			}
+		}
+
+		// Обновляем курсор
+		if len(result) > 0 {
+			cursor = result[0].Messages[len(result[0].Messages)-1].ID
+		}
+	}
 }
 
-func (s *Streamer) Consume() {
-	// TODO
+func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
+	var wg *sync.WaitGroup
+	// Создаем пул горутин-работников (Worker Pool)
+	workerPool := make(chan struct{}, 6)
+	defer wg.Done()
+
+	cursor := "0"
+
+	for {
+		result, err := s.c.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{stream, cursor},
+			Count:   10,
+			Block:   0,
+		}).Result()
+
+		if err != nil {
+			log.Fatalf("Failed to read from stream: %v\n", err)
+			return
+		}
+
+		for _, xStream := range result {
+			for _, message := range xStream.Messages {
+				workerPool <- struct{}{}
+				wg.Add(1)
+				go func(ctx context.Context, m redis.XMessage) {
+					defer func() {
+						<-workerPool
+						wg.Done()
+					}()
+					processMessage(ctx, m)
+				}(ctx, message)
+			}
+		}
+
+		if len(result) > 0 {
+			cursor = result[0].Messages[len(result[0].Messages)-1].ID
+		}
+	}
+}
+
+func processMessage(_ context.Context, message redis.XMessage) {
+	// Обработка сообщения
+	fmt.Printf("Message: %v\n", message)
 }
 
 func (s *Streamer) Publish(ctx context.Context) error {
@@ -44,9 +117,9 @@ func (s *Streamer) Publish(ctx context.Context) error {
 		MaxLen: 0,
 		ID:     "",
 		Values: map[string]interface{}{
-			"whatHappened": string("ticket received"),
-			"ticketID":     int(rand.Intn(100000000)),
-			"ticketData":   string("some ticket data"),
+			"whatHappened": "ticket received",
+			"ticketID":     rand.Intn(100000000),
+			"ticketData":   "some ticket data",
 		},
 	}).Err()
 
