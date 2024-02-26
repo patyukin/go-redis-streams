@@ -3,14 +3,11 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/patyukin/go-redis-streams/internal/streamer"
 	"github.com/redis/go-redis/v9"
 	"log"
 	"math/rand"
 	"sync"
 )
-
-var _ streamer.StreamerInterface = (*Streamer)(nil)
 
 type Streamer struct {
 	c *redis.Client
@@ -54,7 +51,7 @@ func (s *Streamer) Consume(ctx context.Context, stream string) {
 				wg.Add(1)
 				go func(ctx context.Context, m redis.XMessage) {
 					defer wg.Done()
-					processMessage(ctx, m)
+					//processMessage(ctx, m)
 				}(ctx, message)
 			}
 		}
@@ -66,7 +63,8 @@ func (s *Streamer) Consume(ctx context.Context, stream string) {
 	}
 }
 
-func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
+func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m redis.XMessage) error) {
+
 	var wg *sync.WaitGroup
 	// Создаем пул горутин-работников (Worker Pool)
 	workerPool := make(chan struct{}, 6)
@@ -88,6 +86,7 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
 
 		for _, xStream := range result {
 			for _, message := range xStream.Messages {
+
 				workerPool <- struct{}{}
 				wg.Add(1)
 				go func(ctx context.Context, m redis.XMessage) {
@@ -95,7 +94,11 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
 						<-workerPool
 						wg.Done()
 					}()
-					processMessage(ctx, m)
+					err = processMessage(ctx, m)
+					if err != nil {
+						// TODO - обработка ошибки
+						return
+					}
 				}(ctx, message)
 			}
 		}
@@ -104,11 +107,6 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
 			cursor = result[0].Messages[len(result[0].Messages)-1].ID
 		}
 	}
-}
-
-func processMessage(_ context.Context, message redis.XMessage) {
-	// Обработка сообщения
-	fmt.Printf("Message: %v\n", message)
 }
 
 func (s *Streamer) Publish(ctx context.Context) error {

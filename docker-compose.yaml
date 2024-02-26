@@ -5,3 +5,13 @@ services:
     image: redis
     ports:
       - "6379:6379"
+
+  reader:
+    build: ./reader
+    depends_on:
+      - redis
+
+  sender :
+    build: ./sender
+    depends_on:
+      - redis
