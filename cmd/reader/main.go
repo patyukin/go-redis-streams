@@ -3,48 +3,30 @@ package main
 import (
 	"context"
 	"github.com/patyukin/go-redis-streams/internal/app"
-	"github.com/patyukin/go-redis-streams/internal/streamer/redis"
+	"github.com/patyukin/go-redis-streams/internal/config"
 	"log"
+	"log/slog"
 	"os"
-	"os/signal"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := redis.NewRedisStreamer(ctx)
-	a := app.NewApp(client)
-
-	done := make(chan struct{})
-
-	go func() {
-		err := a.Run(ctx)
-		if err != nil {
-			done <- struct{}{}
-			log.Fatal(err)
-		}
-	}()
-
-	go func() {
-		err := a.Run(ctx)
-		if err != nil {
-			done <- struct{}{}
-			log.Fatal(err)
-		}
-	}()
-
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt)
-
-	select {
-	case <-done:
-	case <-ch:
+	cfg, err := config.LoadYamlConfig()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
-	gracefullShotdown()
-}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-func gracefullShotdown() {
-	// closed
+	a, err := app.NewApp(ctx, cfg, logger)
+	if err != nil {
+		log.Fatalf("Failed to init app: %v\n", err)
+	}
+
+	err = a.Run(ctx)
+	if err != nil {
+		log.Fatalf("Failed to run: %v\n", err)
+	}
 }
