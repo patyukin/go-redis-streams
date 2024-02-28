@@ -38,12 +38,10 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessa
 		result, err := s.c.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{stream, cursor},
 			Count:   10,
-			Block:   1 * time.Second,
+			Block:   10 * time.Second,
 		}).Result()
 
-		if errors.Is(err, redis.Nil) {
-			continue
-		} else if err != nil {
+		if err != nil && !errors.Is(err, redis.Nil) {
 			log.Fatalf("Failed to read from stream: %v\n", err)
 			return
 		}
