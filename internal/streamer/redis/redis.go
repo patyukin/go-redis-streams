@@ -4,24 +4,28 @@ import (
 	"context"
 	"errors"
 	"github.com/patyukin/go-redis-streams/internal/config"
+	"github.com/patyukin/go-redis-streams/internal/streamer"
+	"github.com/patyukin/go-redis-streams/pkg/logger"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"log"
 	"math/rand"
-	"time"
 )
 
 type Streamer struct {
 	c *redis.Client
 }
 
-func NewRedisStreamer(ctx context.Context, cfg *config.Config) *Streamer {
+func NewRedisStreamer(ctx context.Context, cfg *config.Config) streamer.StreamerInterface {
 	client := redis.NewClient(&redis.Options{
-		Addr: cfg.Redis.DNS,
+		Addr:           cfg.Redis.DNS,
+		PoolSize:       10,
+		MaxActiveConns: 100,
 	})
 
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		log.Fatal("Unbale to connect to Redis", err)
+		log.Fatal("Unable to connect to Redis", err)
 	}
 
 	return &Streamer{
@@ -35,12 +39,12 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessa
 	cursor := "0"
 
 	for {
+		logger.GetLogger(ctx).Debug("Consume", zap.String("stream", stream), zap.String("cursor", cursor))
 		result, err := s.c.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{stream, cursor},
 			Count:   10,
-			Block:   10 * time.Second,
+			Block:   0,
 		}).Result()
-
 		if err != nil && !errors.Is(err, redis.Nil) {
 			log.Fatalf("Failed to read from stream: %v\n", err)
 			return
@@ -71,15 +75,15 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessa
 	}
 }
 
-func (s *Streamer) Publish(ctx context.Context) error {
+func (s *Streamer) Publish(ctx context.Context, stream string) error {
 	err := s.c.XAdd(ctx, &redis.XAddArgs{
-		Stream: "tickets",
+		Stream: stream,
 		MaxLen: 0,
 		ID:     "",
 		Values: map[string]interface{}{
-			"whatHappened": "ticket received",
+			"whatHappened": stream + " received",
 			"ticketID":     rand.Intn(100000000),
-			"ticketData":   "some ticket data",
+			"ticketData":   "some " + stream + " data",
 		},
 	}).Err()
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"github.com/patyukin/go-redis-streams/internal/app"
 	"github.com/patyukin/go-redis-streams/internal/config"
+	"github.com/patyukin/go-redis-streams/internal/processor"
+	"github.com/patyukin/go-redis-streams/internal/streamer/redis"
+	"github.com/patyukin/go-redis-streams/pkg/logger"
+	"go.uber.org/zap"
 	"log"
-	"log/slog"
-	"os"
 )
 
 func main() {
@@ -18,15 +20,30 @@ func main() {
 		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	a, err := app.NewApp(ctx, cfg, logger)
+	l, err := logger.InitLogger(cfg.Logger.Path, "dev")
 	if err != nil {
-		log.Fatalf("Failed to init app: %v\n", err)
+		l.Fatal("Failed to init logger", zap.String("error", err.Error()))
 	}
 
-	err = a.Run(ctx)
+	wrapCtx := context.WithValue(ctx, "logger", l)
+
+	streamer := redis.NewRedisStreamer(wrapCtx, cfg)
+	processors := []app.Processor{
+		processor.NewBookProcessor(streamer),
+		processor.NewJournalProcessor(streamer),
+		processor.NewBookProcessor(streamer),
+		processor.NewJournalProcessor(streamer),
+		processor.NewBookProcessor(streamer),
+		processor.NewJournalProcessor(streamer),
+	}
+
+	a, err := app.NewApp(cfg, processors)
 	if err != nil {
-		log.Fatalf("Failed to run: %v\n", err)
+		l.Fatal("Failed to init app", zap.String("error", err.Error()))
+	}
+
+	err = a.RunStream(wrapCtx)
+	if err != nil {
+		l.Fatal("Failed to run", zap.String("error", err.Error()))
 	}
 }

@@ -2,68 +2,48 @@ package app
 
 import (
 	"context"
-	"github.com/patyukin/go-redis-streams/internal/closer"
 	"github.com/patyukin/go-redis-streams/internal/config"
-	"log/slog"
-	"sync"
+	"golang.org/x/sync/errgroup"
+	"log"
 )
 
-type App struct {
-	serviceProvider *serviceProvider
+type Processor interface {
+	Run(ctx context.Context) error
 }
 
-func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*App, error) {
-	a := &App{}
+type App struct {
+	cfg        *config.Config
+	processors []Processor
+}
 
-	err := a.initDeps(ctx, cfg, logger)
-	if err != nil {
-		return nil, err
+func NewApp(cfg *config.Config, processors []Processor) (*App, error) {
+	a := &App{
+		cfg:        cfg,
+		processors: processors,
 	}
 
 	return a, nil
 }
 
-func (a *App) initDeps(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
-	init := []func(ctx context.Context, cfg *config.Config, logger *slog.Logger) error{
-		a.initServiceProvider,
-	}
+func (a *App) RunStream(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
 
-	for _, f := range init {
-		err := f(ctx, cfg, logger)
-		if err != nil {
+	for _, processor := range a.processors {
+		processor := processor
+		g.Go(func() error {
+			err := processor.Run(ctx)
+			if err != nil {
+				log.Println("Failed to run processor:", err)
+				// TODO: прервать все остальные стримы (контекст)
+			}
+
 			return err
-		}
+		})
 	}
 
-	return nil
-}
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
-func (a *App) Run(ctx context.Context) error {
-	defer func() {
-		closer.CloseAll()
-		closer.Wait()
-	}()
-
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		a.serviceProvider.Streamer(ctx).LimitConsume(ctx, "journals", a.processMessageB)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		a.serviceProvider.Streamer(ctx).LimitConsume(ctx, "books", a.processMessage)
-	}()
-
-	wg.Wait()
-
-	return nil
-}
-
-func (a *App) initServiceProvider(_ context.Context, cfg *config.Config, logger *slog.Logger) error {
-	a.serviceProvider = newServiceProvider(cfg, logger)
 	return nil
 }

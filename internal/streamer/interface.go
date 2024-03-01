@@ -6,6 +6,6 @@ import (
 )
 
 type StreamerInterface interface {
-	Publish(ctx context.Context) error
+	Publish(ctx context.Context, stream string) error
 	LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m goredis.XMessage) error)
 }

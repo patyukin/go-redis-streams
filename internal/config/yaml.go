@@ -7,7 +7,7 @@ import (
 )
 
 func LoadYamlConfig() (*Config, error) {
-	configFilePath := os.Getenv(ConfigFilePath)
+	configFilePath := os.Getenv(ConfigFilePath) // ./config.yaml, .config-test.yaml
 
 	cfg := &Config{}
 

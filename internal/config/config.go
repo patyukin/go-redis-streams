@@ -6,6 +6,10 @@ const (
 
 type Config struct {
 	Redis struct {
-		DNS string
+		DNS      string
+		Password string
+	}
+	Logger struct {
+		Path string
 	}
 }
