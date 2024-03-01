@@ -2,28 +2,30 @@ package redis
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"github.com/patyukin/go-redis-streams/internal/config"
 	"github.com/patyukin/go-redis-streams/internal/streamer"
+	"github.com/patyukin/go-redis-streams/pkg/logger"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"log"
 	"math/rand"
-	"sync"
 )
-
-var _ streamer.StreamerInterface = (*Streamer)(nil)
 
 type Streamer struct {
 	c *redis.Client
 }
 
-func NewRedisStreamer(ctx context.Context) *Streamer {
+func NewRedisStreamer(ctx context.Context, cfg *config.Config) streamer.StreamerInterface {
 	client := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", "127.0.0.1", "6379"),
+		Addr:           cfg.Redis.DNS,
+		PoolSize:       10,
+		MaxActiveConns: 100,
 	})
 
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		log.Fatal("Unbale to connect to Redis", err)
+		log.Fatal("Unable to connect to Redis", err)
 	}
 
 	return &Streamer{
@@ -31,71 +33,38 @@ func NewRedisStreamer(ctx context.Context) *Streamer {
 	}
 }
 
-func (s *Streamer) Consume(ctx context.Context, stream string) {
-	var wg *sync.WaitGroup
-
-	cursor := "0"
-
-	for {
-		result, err := s.c.XRead(ctx, &redis.XReadArgs{
-			Streams: []string{stream, cursor},
-			Count:   10,
-			Block:   0,
-		}).Result()
-
-		if err != nil {
-			log.Fatalf("Failed to read from stream: %v\n", err)
-			return
-		}
-
-		// Обработка сообщений из стрима
-		for _, xStream := range result {
-			for _, message := range xStream.Messages {
-				wg.Add(1)
-				go func(ctx context.Context, m redis.XMessage) {
-					defer wg.Done()
-					processMessage(ctx, m)
-				}(ctx, message)
-			}
-		}
-
-		// Обновляем курсор
-		if len(result) > 0 {
-			cursor = result[0].Messages[len(result[0].Messages)-1].ID
-		}
-	}
-}
-
-func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
-	var wg *sync.WaitGroup
-	// Создаем пул горутин-работников (Worker Pool)
+func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m redis.XMessage) error) {
 	workerPool := make(chan struct{}, 6)
-	defer wg.Done()
 
 	cursor := "0"
 
 	for {
+		logger.GetLogger(ctx).Debug("Consume", zap.String("stream", stream), zap.String("cursor", cursor))
 		result, err := s.c.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{stream, cursor},
 			Count:   10,
 			Block:   0,
 		}).Result()
-
-		if err != nil {
+		if err != nil && !errors.Is(err, redis.Nil) {
 			log.Fatalf("Failed to read from stream: %v\n", err)
 			return
 		}
 
 		for _, xStream := range result {
 			for _, message := range xStream.Messages {
+
 				workerPool <- struct{}{}
-				wg.Add(1)
 				go func(ctx context.Context, m redis.XMessage) {
+
 					defer func() {
 						<-workerPool
-						wg.Done()
 					}()
-					processMessage(ctx, m)
+
+					err = processMessage(ctx, m)
+					if err != nil {
+						// TODO - обработка ошибки
+						return
+					}
 				}(ctx, message)
 			}
 		}
@@ -106,20 +75,15 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string) {
 	}
 }
 
-func processMessage(_ context.Context, message redis.XMessage) {
-	// Обработка сообщения
-	fmt.Printf("Message: %v\n", message)
-}
-
-func (s *Streamer) Publish(ctx context.Context) error {
+func (s *Streamer) Publish(ctx context.Context, stream string) error {
 	err := s.c.XAdd(ctx, &redis.XAddArgs{
-		Stream: "tickets",
+		Stream: stream,
 		MaxLen: 0,
 		ID:     "",
 		Values: map[string]interface{}{
-			"whatHappened": "ticket received",
+			"whatHappened": stream + " received",
 			"ticketID":     rand.Intn(100000000),
-			"ticketData":   "some ticket data",
+			"ticketData":   "some " + stream + " data",
 		},
 	}).Err()
 

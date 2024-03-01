@@ -2,10 +2,10 @@ package streamer
 
 import (
 	"context"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type StreamerInterface interface {
-	Publish(ctx context.Context) error
-	Consume(ctx context.Context, stream string)
-	LimitConsume(ctx context.Context, stream string)
+	Publish(ctx context.Context, stream string) error
+	LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m goredis.XMessage) error)
 }
