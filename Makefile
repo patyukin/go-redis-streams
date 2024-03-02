@@ -6,3 +6,8 @@ install-deps:
 lint:
 	golangci-lint run
 .PHONY: install-deps
+
+build:
+	docker buildx build --no-cache -t cr.selcloud.ru/registry/sender:latest .
+.PHONY: build
+

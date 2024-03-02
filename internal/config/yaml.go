@@ -1,19 +1,20 @@
 package config
 
 import (
+	"fmt"
 	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 )
 
 func LoadYamlConfig() (*Config, error) {
-	configFilePath := os.Getenv(ConfigFilePath) // ./config.yaml, .config-test.yaml
+	configFilePath := os.Getenv(ConfigFilePath)
 
 	cfg := &Config{}
 
 	file, err := os.Open(configFilePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open config file: %w, path: %s", err, configFilePath)
 	}
 
 	defer func() {

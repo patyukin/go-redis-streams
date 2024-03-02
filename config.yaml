@@ -1,4 +1,4 @@
 redis:
-  dns: "0.0.0.0:6379"
+  dns: "redis:6379"
 logger:
   path: "logs/app.log"
