@@ -26,7 +26,10 @@ func main() {
 
 	wrapCtx := context.WithValue(ctx, "logger", l)
 
-	client := redis.NewRedisStreamer(wrapCtx, cfg)
+	client, err := redis.NewRedisStreamer(wrapCtx, cfg)
+	if err != nil {
+		l.Fatal("Failed to init redis", zap.String("error", err.Error()))
+	}
 
 	for i := 0; i < 100000000000; i++ {
 		r := rand.Intn(2)

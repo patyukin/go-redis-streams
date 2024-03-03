@@ -27,14 +27,17 @@ func main() {
 
 	wrapCtx := context.WithValue(ctx, "logger", l)
 
-	streamer := redis.NewRedisStreamer(wrapCtx, cfg)
+	reader, err := redis.NewRedisStreamer(wrapCtx, cfg)
 	processors := []app.Processor{
-		processor.NewBookProcessor(streamer),
-		processor.NewJournalProcessor(streamer),
-		processor.NewBookProcessor(streamer),
-		processor.NewJournalProcessor(streamer),
-		processor.NewBookProcessor(streamer),
-		processor.NewJournalProcessor(streamer),
+		processor.NewBookProcessor(reader),
+		processor.NewJournalProcessor(reader),
+		processor.NewBookProcessor(reader),
+		processor.NewJournalProcessor(reader),
+		processor.NewBookProcessor(reader),
+		processor.NewJournalProcessor(reader),
+	}
+	if err != nil {
+		l.Fatal("Failed to init redis", zap.String("error", err.Error()))
 	}
 
 	a, err := app.NewApp(cfg, processors)
