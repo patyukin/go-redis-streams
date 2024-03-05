@@ -5,7 +5,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type Processor interface {
-	Run(ctx context.Context) error
-	processMessage(ctx context.Context, m redis.XMessage) error
+type StreamReader interface {
+	LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m redis.XMessage) error)
+	Close() error
 }

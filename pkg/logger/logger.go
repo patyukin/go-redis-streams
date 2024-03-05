@@ -45,3 +45,27 @@ func WithLoggerFields(ctx context.Context, fields ...zap.Field) context.Context 
 
 	return wrap
 }
+
+func Debug(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Debug(msg, fields...)
+}
+
+func Info(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Info(msg, fields...)
+}
+
+func Warn(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Warn(msg, fields...)
+}
+
+func Error(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Error(msg, fields...)
+}
+
+func Fatal(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Fatal(msg, fields...)
+}
+
+func Panic(ctx context.Context, msg string, fields ...zap.Field) {
+	GetLogger(ctx).Panic(msg, fields...)
+}

@@ -2,22 +2,29 @@ package processor
 
 import (
 	"context"
-	"github.com/patyukin/go-redis-streams/internal/streamer"
 	"github.com/redis/go-redis/v9"
 )
 
-type JournalProcessor struct {
-	streamer streamer.StreamerInterface
+const Journals = "journals"
+
+type JournalStorage interface {
+	Save() error
 }
 
-func NewJournalProcessor(streamer streamer.StreamerInterface) Processor {
+type JournalProcessor struct {
+	streamer StreamReader
+	storage  JournalStorage
+}
+
+func NewJournalProcessor(streamer StreamReader, storage JournalStorage) *JournalProcessor {
 	return &JournalProcessor{
 		streamer: streamer,
+		storage:  storage,
 	}
 }
 
 func (p *JournalProcessor) Run(ctx context.Context) error {
-	p.streamer.LimitConsume(ctx, "books", p.processMessage)
+	p.streamer.LimitConsume(ctx, Journals, p.processMessage)
 
 	return nil
 }

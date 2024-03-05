@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: "cr.selcloud.ru/registry"
-  IMAGE_NAME: "simple-stream-sender"
-  CONTAINER_NAME: "simple-stream-sender-container"
+  IMAGE_NAME: "simple-stream-publisher"
+  CONTAINER_NAME: "simple-stream-publisher-container"
 
 jobs:
   image-build-and-push:

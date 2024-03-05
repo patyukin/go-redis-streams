@@ -1,10 +1,9 @@
-package redis
+package streamer
 
 import (
 	"context"
 	"fmt"
 	"github.com/patyukin/go-redis-streams/internal/config"
-	"github.com/patyukin/go-redis-streams/internal/streamer"
 	"github.com/patyukin/go-redis-streams/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -15,7 +14,7 @@ type Streamer struct {
 	c *redis.Client
 }
 
-func NewRedisStreamer(ctx context.Context, cfg *config.Config) (streamer.StreamerInterface, error) {
+func NewRedisStreamer(ctx context.Context, cfg *config.Config) (*Streamer, error) {
 	wrappedCtx := logger.WithLoggerFields(ctx, zap.String("func", "NewRedisStreamer"))
 	client := redis.NewClient(&redis.Options{
 		Addr:           cfg.Redis.DNS,
@@ -25,7 +24,6 @@ func NewRedisStreamer(ctx context.Context, cfg *config.Config) (streamer.Streame
 
 	_, err := client.Ping(wrappedCtx).Result()
 	if err != nil {
-		logger.GetLogger(wrappedCtx).Error("Failed to ping redis", zap.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
@@ -34,20 +32,20 @@ func NewRedisStreamer(ctx context.Context, cfg *config.Config) (streamer.Streame
 }
 
 func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessage func(ctx context.Context, m redis.XMessage) error) {
-	wrappedCtx := logger.WithLoggerFields(ctx, zap.String("LimitConsume with stream:", stream))
+	ctx = logger.WithLoggerFields(ctx, zap.String("LimitConsume with stream:", stream))
 	workerPool := make(chan struct{}, 6)
 
 	cursor := "0"
 
 	for {
-		logger.GetLogger(wrappedCtx).Debug("Consume", zap.String("stream", stream), zap.String("cursor", cursor))
+		logger.Debug(ctx, "Consume", zap.String("stream", stream), zap.String("cursor", cursor))
 		result, err := s.c.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{stream, cursor},
 			Count:   10,
 			Block:   0,
 		}).Result()
 		if err != nil {
-			logger.GetLogger(wrappedCtx).Error("Failed to XRead", zap.String("error", err.Error()))
+			logger.GetLogger(ctx).Error("Failed to XRead", zap.String("error", err.Error()))
 			return
 		}
 
@@ -64,6 +62,7 @@ func (s *Streamer) LimitConsume(ctx context.Context, stream string, processMessa
 					err = processMessage(ctx, m)
 					if err != nil {
 						// TODO - обработка ошибки
+						logger.GetLogger(ctx).Error("Failed to XRead", zap.String("error", err.Error()))
 						return
 					}
 				}(ctx, message)
@@ -89,4 +88,8 @@ func (s *Streamer) Publish(ctx context.Context, stream string) error {
 	}).Err()
 
 	return err
+}
+
+func (s *Streamer) Close() error {
+	return s.c.Close()
 }
