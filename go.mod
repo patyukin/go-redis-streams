@@ -1,6 +1,6 @@
 module github.com/patyukin/go-redis-streams
 
-go 1.21.7
+go 1.21.8
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1
