@@ -4,7 +4,7 @@ COPY . /app
 WORKDIR /app
 
 RUN go mod download
-RUN go build -o ./bin/sender cmd/sender/main.go
+RUN go build -o ./bin/publisher cmd/publisher/main.go
 
 FROM alpine:3.19
 

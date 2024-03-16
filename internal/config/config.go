@@ -12,4 +12,7 @@ type Config struct {
 	Logger struct {
 		Path string
 	}
+	MySQL struct {
+		DSN string
+	}
 }

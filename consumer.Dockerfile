@@ -14,4 +14,4 @@ RUN go mod download &&  \
 
 ENV CONFIG_FILE_PATH=config.yaml
 
-ENTRYPOINT CompileDaemon --build="go build -o bin/reader cmd/reader/main.go" --command=./bin/reader
+ENTRYPOINT CompileDaemon --build="go build -o bin/consumer cmd/consumer/main.go" --command=./bin/consumer

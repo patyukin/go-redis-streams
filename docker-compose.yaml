@@ -7,11 +7,36 @@ services:
       - "6379:6379"
     restart: always
 
-  sender:
+  publisher:
     build:
-      dockerfile: sender.Dockerfile
+      dockerfile: publisher.Dockerfile
     restart: always
     volumes:
       - .:/app
     depends_on:
       - redis
+
+  consumer:
+    build:
+      dockerfile: consumer.Dockerfile
+    restart: always
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+
+  db:
+    image: mysql:8
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: notify
+      MYSQL_USER: user
+      MYSQL_PASSWORD: user123
+    volumes:
+      - mysql_db:/var/lib/mysql/
+
+volumes:
+  mysql_db:

@@ -3,8 +3,9 @@ package app
 import (
 	"context"
 	"github.com/patyukin/go-redis-streams/internal/config"
+	"github.com/patyukin/go-redis-streams/pkg/logger"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"log"
 )
 
 type Processor interface {
@@ -25,16 +26,25 @@ func NewApp(cfg *config.Config, processors []Processor) (*App, error) {
 	return a, nil
 }
 
-func (a *App) RunStream(ctx context.Context) error {
+func (a *App) RunConsume(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	ctx = logger.WithLoggerFields(ctx, zap.String("func", "RunConsume"))
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, processor := range a.processors {
-		processor := processor
+		prcr := processor
 		g.Go(func() error {
-			err := processor.Run(ctx)
+			logger.Debug(ctx, "Run processor")
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
+			err := prcr.Run(ctx)
 			if err != nil {
-				log.Println("Failed to run processor:", err)
-				// TODO: прервать все остальные стримы (контекст)
+				logger.Error(ctx, "Failed to run processor:", zap.String("error", err.Error()))
+				cancel()
 			}
 
 			return err
@@ -45,5 +55,9 @@ func (a *App) RunStream(ctx context.Context) error {
 		return err
 	}
 
+	return nil
+}
+
+func (a *App) Close() error {
 	return nil
 }
